@@ -71,10 +71,18 @@ export default {
   },
   mounted() {
     this.updateCaptchaUrl()
+    this.handleRegister()
+    this.getCaptcha()
   },
   methods: {
     updateCaptchaUrl() {
       this.captchaUrl = '/api/captcha?_t=' + new Date().getTime()
+    },
+    async getCaptcha() {
+      console.log('getCaptcha')
+      let res = await this.$http.get('/captcha').then(res => {
+        console.log(res)
+      }) 
     },
     handleRegister() {
       console.log('handleRegister')
@@ -88,6 +96,9 @@ export default {
             captcha: this.form.captcha
           }
           let res = await this.$http.post('/user/register', obj)
+          let login = await this.$http.post('/user/login', obj)
+          console.log('res222res222res222+++++', login)
+          console.log('resresresresres:::', res)
           if (res.code === 0) {
             this.$alert('注册成功', '成功', {
               confirmButtonText: '去登陆',
@@ -96,7 +107,11 @@ export default {
               }
             })
           } else {
-            this.$message.error(res.message)
+            // this.$message.error(res.message)
+            this.$message({
+              type: 'error',
+              message: res.message || 'message- 注册失败////'
+            })
           }
         } else {
           console.log('校验失败////')
