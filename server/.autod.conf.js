@@ -1,4 +1,4 @@
-'use strict';
+'use strict'
 
 module.exports = {
   write: true,
@@ -25,5 +25,5 @@ module.exports = {
     './test/fixtures',
     './dist',
   ],
-};
+}
 
