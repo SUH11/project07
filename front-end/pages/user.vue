@@ -20,7 +20,6 @@ export default {
     }
   },
   mounted() {
-    // this.getUserInfo()
     this.bindEvents()
   },
   methods: {
@@ -54,9 +53,7 @@ export default {
       console.log('/user/info===', res)
     },
     async uploadFile() {
-      console.log(111)
       let validate = await this.isImage(this.file)
-      console.log(validate)
       if (!validate) {
         console.log('文件格式不正确')
       } else {
@@ -71,7 +68,6 @@ export default {
           this.uploadProgress = Number(((progress.loaded / progress.total) * 100).toFixed(2))
         }
       })
-      console.log('upload res===========', res)
     },
     handleFilerChange(e) {
       const [file]= e.target.files
@@ -82,16 +78,25 @@ export default {
     async isImage(file) {
       // 通过文件流来判定
       // gif
-      return await this.isGif(file)
+      return await this.isPng(file)
     },
+    // @todo 二进制里有宽高的信息
     async isGif(file) {
       // GIF89a GIF87a
       // 6个16进制 '47 49 46 38 39 61'  '47 49 46 38 37 61'
       const res = await this.blobToString(file.slice(0, 6))
-
-      console.log('res', res)
-      
       return res === '47 49 46 38 39 61' || res === '47 49 46 38 37 61'
+    },
+    async isPng(file) {
+      const res = await this.blobToString(file.slice(0, 6))
+      console.log('res', res)
+      return res === '89 50 4E 47 0D 0A'
+    },
+    async isJpg(file) {
+      const len = file.size
+      const start = await this.blobToString(file.slice(0, 2))
+      const tail = await this.blobToString(file.slice(-2, len))
+      return (start === 'FF D8') && (tail === 'FF D9')
     },
     async blobToString(blob) {
       return new Promise(resolve => {
@@ -101,6 +106,7 @@ export default {
           const res = reader.result.split('')
                         .map(v => v.charCodeAt())
                         .map(v => v.toString(16).toUpperCase())
+                        .map(v => v.length < 2 ? `0${v}` : v)
                         .join(' ')
 
           resolve(res)
