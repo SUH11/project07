@@ -7,9 +7,9 @@
       <el-form-item prop="email" label="邮箱">
         <el-input v-model="form.email" placeholder="请输入邮箱"></el-input>
       </el-form-item>
-      <el-form-item prop="code" label="验证码">
+      <el-form-item prop="captcha" label="验证码">
         <div class="register-code">
-          <el-input v-model="form.code" placeholder="请输入验证码"></el-input>
+          <el-input v-model="form.captcha" placeholder="请输入验证码"></el-input>
           <img :src="captchaUrl" alt="" @click="updateCaptchaUrl()">
         </div>
       </el-form-item>
@@ -23,7 +23,7 @@
         <el-input type="password" v-model="form.repassword" placeholder="请再次输入密码"></el-input>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" size="small" @click.native.prevent="handleRegister">注 册</el-button>
+        <el-button type="primary" @click.native.prevent="handleRegister">注 册</el-button>
       </el-form-item>
     </el-form>
   </div>
@@ -41,7 +41,7 @@ export default {
         repassword: '123678_a',
         nickname: 'nickname',
         email: '1067489058@qq.com',
-        code: ''
+        captcha: ''
       },
       rules: {
         email: [
@@ -54,9 +54,9 @@ export default {
         nickname: [
           { required: true, message: '请输入昵称' }
         ],
-        password: [
+        // password: [
           // { required: true, pattern: /^[\w_-]{6, 12}$/, message: '请输入6-12位的密码' }
-        ],
+        // ],
         repassword: [
           { required: true, message: '请再次输入密码' },
           { validator: (rule, value, callback) => {
@@ -71,8 +71,8 @@ export default {
   },
   mounted() {
     this.updateCaptchaUrl()
-    this.handleRegister()
-    this.getCaptcha()
+    // this.handleRegister()
+    // this.getCaptcha()
   },
   methods: {
     updateCaptchaUrl() {
@@ -88,7 +88,6 @@ export default {
       console.log('handleRegister')
       this.$refs.registerForm.validate(async valid => {
         if (valid) {
-          console.log('校验成功！@！！')
           let obj = {
             email: this.form.email,
             nickname: this.form.nickname,
@@ -96,9 +95,6 @@ export default {
             captcha: this.form.captcha
           }
           let res = await this.$http.post('/user/register', obj)
-          let login = await this.$http.post('/user/login', obj)
-          console.log('res222res222res222+++++', login)
-          console.log('resresresresres:::', res)
           if (res.code === 0) {
             this.$alert('注册成功', '成功', {
               confirmButtonText: '去登陆',
@@ -107,7 +103,6 @@ export default {
               }
             })
           } else {
-            // this.$message.error(res.message)
             this.$message({
               type: 'error',
               message: res.message || 'message- 注册失败////'
