@@ -6,17 +6,36 @@
     </div>
     <div>
       <el-progress :text-inside="true" :stroke-width="20" :percentage="uploadProgress"></el-progress>
+      <h1>chunks hash</h1>
+      <el-progress :text-inside="true" :stroke-width="20" :percentage="hashProgress"></el-progress>
+      <h1>chunks hashIdleProgress</h1>
+      <el-progress :text-inside="true" :stroke-width="20" :percentage="hashIdleProgress"></el-progress>
+      <h1>chunks hashSampleProgress</h1>
+      <el-progress :text-inside="true" :stroke-width="20" :percentage="hashSampleProgress"></el-progress>
+    </div>
+    <h1>网格</h1>
+    <div class="cube-container">
+      <div class="cube" v-for="chunk in chunks" :key="chunk.name">
+        {{chunk}}
+      </div>
     </div>
     <el-button @click="uploadFile">上传</el-button>
   </div>
 </template>
 
 <script>
+import sparkMD5 from 'spark-md5'
+const CHUNK_SIZE = 0.5 * 1024 * 1024
 export default {
   data() {
     return {
       file: null,
-      uploadProgress: 0
+      uploadProgress: 0,
+      chunks: [],
+      hash: '',
+      hashProgress: 0,
+      hashIdleProgress: 0,
+      hashSampleProgress: 0
     }
   },
   mounted() {
@@ -52,21 +71,158 @@ export default {
       let res = await this.$http.get('/user/info')
       console.log('/user/info===', res)
     },
-    async uploadFile() {
-      let validate = await this.isImage(this.file)
-      if (!validate) {
-        console.log('文件格式不正确')
-      } else {
-        console.log('格式正确')
+    createFileChunk(file, size = CHUNK_SIZE) {
+      const chunks = []
+      let cur = 0
+      while (cur < this.file.size) {
+        chunks.push({
+          index: cur,
+          file: this.file.slice(cur, cur + size)
+        })
+        cur += size
       }
-      const form = new FormData()
-      form.append('name', 'file')
-      form.append('file', this.file)
-
-      const res = await this.$http.post('/uploadfile', form, {
-        onUploadProgress: progress => {
-          this.uploadProgress = Number(((progress.loaded / progress.total) * 100).toFixed(2))
+      return chunks
+    },
+    async calculateHashWorker() {
+      return new Promise(resolve => {
+        this.worker = new Worker('./hash.js')
+        this.worker.postMessage({
+          chunks: this.chunks
+        })
+        this.worker.onmessage = e => {
+          const { progress, hash } = e.data
+          this.hashProgress = Number(progress)
+          if (hash) {
+            resolve(hash)
+          }
         }
+      })
+    },
+    async calculateHasIdle() {
+      const chunks = this.chunks
+      return new Promise(resolve => {
+        const spark = new sparkMD5.ArrayBuffer()
+        let count = 0
+        const appedToSpark = async file => {
+          const reader = new FileReader()
+          reader.readAsArrayBuffer(file)
+          reader.onload = e => {
+            spark.append(e.target.result)
+            // resolve()
+          }
+        }
+        const workLoop = async deadline => {
+          while (count < chunks.length && deadline.timeRemaining() > 1) {
+            // 有任务 且有空闲时间
+            await appedToSpark(chunks[count].file)
+            count ++
+            if (count < chunks.length) {
+              this.hashIdleProgress = Number(((100 * count) / chunks.length).toFixed(2))
+            } else {
+              this.hashIdleProgress = 100
+              resolve(spark.end())
+            }
+          }
+          window.requestIdleCallback(workLoop)
+        }
+        window.requestIdleCallback(workLoop)
+      })
+    },
+    async calculateHasSample() {
+      return new Promise(resolve => {
+        const spark = new sparkMD5.ArrayBuffer()
+        const reader = new FileReader()
+
+        const file = this.file
+        const size = file.size
+        const offset = 2 * 1024 * 1024
+        let chunks = [file.slice(0, offset)]
+        let curr = offset
+
+        while (curr < size) {
+          if (curr += offset >= size) {
+            chunks.push(file.slice(curr, curr + offset))
+          } else {
+            const mid = curr + offset / 2
+            const end = curr + offset
+            chunks.push(file.slice(curr, curr + 2))
+            chunks.push(file.slice(mid, mid + 2))
+            chunks.push(file.slice(end - 2, end))
+          }
+          curr += offset
+        }
+
+        reader.readAsArrayBuffer(new Blob(chunks))
+        reader.onload = e => {
+          spark.append(e.target.result)
+          this.hashSampleProgress = 100
+          resolve(spark.end())
+        }
+      })
+    },
+    async uploadFile() {
+      // let validate = await this.isImage(this.file)
+      // if (!validate) {
+      //   console.log('文件格式不正确')
+      // } else {
+      //   console.log('格式正确')
+      // }
+
+      const chunks = this.createFileChunk(this.file)
+      // this.chunks = chunks
+      // console.log('chunks', this.chunks)
+      // const hash1 = await this.calculateHashWorker()
+      // const hash2 = await this.calculateHasIdle()
+      const hash = await this.calculateHasSample()
+      // console.log('hash1', hash1)
+      // console.log('hash2', hash2)
+      // console.log('hash3', hash3)
+      // return
+      this.hash = hash
+
+      this.chunks = chunks.map((chunk, index) => {
+        const name = hash + '-' + index
+        return {
+          name,
+          hash,
+          index,
+          chunk: chunk.file,
+          progress: 0
+        }
+      })
+      
+      await this.uploadChunks()
+
+      // const form = new FormData()
+      // form.append('name', 'file')
+      // form.append('file', this.file)
+
+      // const res = await this.$http.post('/uploadfile', form, {
+      //   onUploadProgress: progress => {
+      //     this.uploadProgress = Number(((progress.loaded / progress.total) * 100).toFixed(2))
+      //   }
+      // })
+    },
+    async uploadChunks() {
+      const requests = this.chunks.map(({chunk, hash, name}, index) => {
+        const form = new FormData()
+        form.append('chunk', chunk)
+        form.append('hash', hash)
+        form.append('name', name)
+        return form
+      }).map((form, index) => this.$http.post('/uploadfile', form, {
+        onUploadProgress: progress => {
+          this.chunks[index].progress = Number(((progress.loaded / progress.total) * 100).toFixed(2))
+        }
+      }))
+      await Promise.all(requests)
+      await this.mergefile()
+    },
+    async mergefile() {
+      this.$http.post('/mergefile', {
+        ext: this.file.name.split('.').pop(),
+        size: CHUNK_SIZE,
+        hash: this.hash
       })
     },
     handleFilerChange(e) {

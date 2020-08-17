@@ -3,6 +3,7 @@
 const svgCaptcha = require('svg-captcha')
 const fse = require('fs-extra')
 const BaseController = require('./base')
+const path = require('path')
 
 class UtilController extends BaseController {
   async captcha() {
@@ -41,17 +42,35 @@ class UtilController extends BaseController {
     hasSend ? this.message('发送成功') : this.error('发送失败')
   }
 
+  async mergefile() {
+    const { ctx } = this
+    const { ext, size, hash } = ctx.request.body
+    const filePath = path.resolve(this.config.UPLOAD_DIR, `${hash}.${ext}`)
+    await ctx.service.tools.mergeFile(filePath, hash, size)
+    this.success({
+      url: `/public/${hash}.${ext}`
+    })
+  }
+
   async uploadfile() {
     const { ctx } = this
-    console.log('===========upload start===========')
-    const { name } = ctx.request.body
+    console.log('===========upload start=======================================')
+    const { name, hash } = ctx.request.body
     const file = ctx.request.files[0]
+    const chunkPath = path.resolve(this.config.UPLOAD_DIR, hash)
 
-    await fse.move(file.filepath, this.config.UPLOAD_DIR + '/' + file.filename)
+    console.log('name, hash', name, hash)
 
-    this.success({
-      url: `/public/${file.filename}`
-    })
+    if (!fse.existsSync(chunkPath)) {
+      await fse.mkdir(chunkPath)
+    }
+
+    await fse.move(file.filepath, `${chunkPath}/${name}`)
+
+    // this.success({
+    //   url: `/public/${file.filename}`
+    // })
+    this.message('切片上传成功！')
   }
 }
 

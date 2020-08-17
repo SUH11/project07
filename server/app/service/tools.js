@@ -1,5 +1,7 @@
 const { Service } = require('egg')
 const nodemailer = require('nodemailer')
+const path = require('path')
+const fse = require('fs-extra')
 
 class ToolService extends Service {
 
@@ -30,6 +32,37 @@ class ToolService extends Service {
       return false
     }
   }
+
+  async mergeFile(filePath, fileHash, size) {
+    const chunksDir = path.resolve(this.config.UPLOAD_DIR, fileHash)
+    let chunks = await fse.readdir(chunksDir)
+    chunks.sort((a, b) => a.split('-')[1] - b.split('-')[1])
+    chunks = chunks.map(cp => path.resolve(chunksDir, cp))
+    console.log('chunks===============', typeof chunks[0])
+    await this.mergeChunks(chunks, filePath, size)
+  }
+
+  async mergeChunks(files, dest, size) {
+    const pipStream = (filePath, writeStream) => new Promise(resolve => {
+      const readStream = fse.createReadStream(filePath)
+      readStream.on('end', () => {
+        fse.unlinkSync(filePath)
+        resolve()
+      })
+      readStream.pipe(writeStream)
+    })
+    await Promise.all(
+      files.map((file, index) => {
+        console.log('file]]=================================', typeof file)
+        pipStream(file, fse.createWriteStream(dest, {
+          start: index * size,
+          end: (index + 1) * size
+        }))
+      })
+    )
+  }
+
+
 }
 
 module.exports = ToolService
